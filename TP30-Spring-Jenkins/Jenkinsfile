@@ -2,51 +2,56 @@ pipeline {
     agent any
 
     tools {
-        // Le nom doit correspondre à "Global Tool Configuration"
+        // IMPORTANT: Le nom doit correspondre EXACTEMENT à "Global Tool Configuration"
+        // Si vous l'avez appelé 'maven', gardez 'maven'. Si c'est 'mvn' (comme mon guide), mettez 'mvn'.
         maven 'mvn' 
     }
 
     environment {
-        // Nom de l'image Docker
         DOCKER_IMAGE = "tp30-demo-app"
     }
 
     stages {
-        stage('Checkout') {
+        stage('Git Clone') {
             steps {
-                // Récupère le code du repo configuré dans le Job
-                checkout scm
+                // Si vous utilisez "Pipeline script from SCM", cette étape est automatique.
+                // Sinon, pour un script manuel :
+                checkout([$class: 'GitSCM',
+                    branches: [[name: 'main']],
+                    userRemoteConfigs: [[url: 'https://github.com/Walid-Ahkouk/first_test_jenkis.git']]
+                ])
             }
         }
 
-        stage('Build & Test') {
+        stage('Build') {
             steps {
-                echo 'Building and Testing...'
-                // Utilisation de 'sh' car Jenkins est sous Linux (Docker)
-                sh 'mvn clean package'
+                // IMPORTANT: On entre dans le dossier du projet
+                dir('TP30-Spring-Jenkins') {
+                    sh 'mvn clean package'
+                }
             }
         }
 
-        stage('Docker Build') {
+        stage('Create Docker Image') {
             steps {
-                echo 'Building Docker Image...'
-                sh "docker build -t ${DOCKER_IMAGE} ."
+                dir('TP30-Spring-Jenkins') {
+                    sh "docker build -t ${DOCKER_IMAGE} ."
+                }
             }
         }
 
-        stage('Docker Run') {
+        stage('Run') {
             steps {
-                echo 'Running Docker Container...'
                 script {
-                    // Arrêter le conteneur s'il existe déjà pour éviter les conflits
+                    // Nettoyage conteneur existant
                     try {
-                         sh "docker stop ${DOCKER_IMAGE} || true"
-                         sh "docker rm ${DOCKER_IMAGE} || true"
+                        sh "docker stop ${DOCKER_IMAGE}"
+                        sh "docker rm ${DOCKER_IMAGE}"
                     } catch (Exception e) {
-                        echo "Pas de conteneur à supprimer"
+                        echo "Aucun conteneur à arrêter"
                     }
-                    
-                    // Lancement du nouveau conteneur
+
+                    // Lancement
                     sh "docker run -d -p 8081:8080 --name ${DOCKER_IMAGE} ${DOCKER_IMAGE}"
                 }
             }
