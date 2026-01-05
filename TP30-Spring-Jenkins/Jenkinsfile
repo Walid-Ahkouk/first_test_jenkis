@@ -1,20 +1,20 @@
 pipeline {
     agent any
 
+    tools {
+        // Le nom doit correspondre à "Global Tool Configuration"
+        maven 'mvn' 
+    }
+
     environment {
         // Nom de l'image Docker
         DOCKER_IMAGE = "tp30-demo-app"
     }
 
-    tools {
-        maven 'mvn'
-    }
-
     stages {
         stage('Checkout') {
             steps {
-                echo 'Checking out source code...'
-                // Le checkout est automatique avec "Pipeline script from SCM"
+                // Récupère le code du repo configuré dans le Job
                 checkout scm
             }
         }
@@ -22,29 +22,15 @@ pipeline {
         stage('Build & Test') {
             steps {
                 echo 'Building and Testing...'
-                // Assurez-vous que Maven est configuré dans "Global Tool Configuration" ou dans le PATH
-                // Sur Windows: bat 'mvn clean package'
-                // Sur Linux/Docker: sh 'mvn clean package'
-                script {
-                    if (isUnix()) {
-                        sh 'mvn clean package'
-                    } else {
-                        bat 'mvn clean package'
-                    }
-                }
+                // Utilisation de 'sh' car Jenkins est sous Linux (Docker)
+                sh 'mvn clean package'
             }
         }
 
         stage('Docker Build') {
             steps {
                 echo 'Building Docker Image...'
-                script {
-                   if (isUnix()) {
-                        sh "docker build -t ${DOCKER_IMAGE} ."
-                    } else {
-                        bat "docker build -t ${DOCKER_IMAGE} ."
-                    }
-                }
+                sh "docker build -t ${DOCKER_IMAGE} ."
             }
         }
 
@@ -52,34 +38,18 @@ pipeline {
             steps {
                 echo 'Running Docker Container...'
                 script {
-                    // Arrêter le conteneur s'il existe déjà pour éviter les conflits de port
+                    // Arrêter le conteneur s'il existe déjà pour éviter les conflits
                     try {
-                        if (isUnix()) {
-                             sh "docker stop ${DOCKER_IMAGE} || true"
-                             sh "docker rm ${DOCKER_IMAGE} || true"
-                             sh "docker run -d -p 8081:8080 --name ${DOCKER_IMAGE} ${DOCKER_IMAGE}"
-                        } else {
-                             bat "docker stop ${DOCKER_IMAGE} || exit 0"
-                             bat "docker rm ${DOCKER_IMAGE} || exit 0"
-                             bat "docker run -d -p 8081:8080 --name ${DOCKER_IMAGE} ${DOCKER_IMAGE}"
-                        }
+                         sh "docker stop ${DOCKER_IMAGE} || true"
+                         sh "docker rm ${DOCKER_IMAGE} || true"
                     } catch (Exception e) {
-                        echo "Erreur lors du déploiement Docker: " + e.getMessage()
+                        echo "Pas de conteneur à supprimer"
                     }
+                    
+                    // Lancement du nouveau conteneur
+                    sh "docker run -d -p 8081:8080 --name ${DOCKER_IMAGE} ${DOCKER_IMAGE}"
                 }
             }
-        }
-    }
-    
-    post {
-        always {
-            echo 'Pipeline finished.'
-        }
-        success {
-            echo 'Pipeline succeeded!'
-        }
-        failure {
-            echo 'Pipeline failed.'
         }
     }
 }
